@@ -12,7 +12,6 @@ type TestJob struct {
 
 func (job *TestJob) Do() {
 	<-time.After(time.Second * 1)
-	fmt.Printf("Done job %d\n", job.id)
 }
 
 func TestRun(t *testing.T) {
@@ -21,9 +20,10 @@ func TestRun(t *testing.T) {
 		job := &TestJob{id: i}
 		go po.Put(job)
 	}
-	for range po.Output {
+	for job := range po.Output {
 		if po.Idle() {
 			break
 		}
+		fmt.Printf("Done job %d\n", job.(*TestJob).id)
 	}
 }

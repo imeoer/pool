@@ -1,10 +1,14 @@
 package pool
 
+import (
+	"sync/atomic"
+)
+
 // Pool - pool object
 type Pool struct {
 	size    uint
+	remain  uint64
 	workers chan Job
-	remain  uint
 	Output  chan Job
 }
 
@@ -27,7 +31,7 @@ func New(size uint) *Pool {
 				job.Do()
 				go func() {
 					pool.Output <- job
-					pool.remain--
+					atomic.AddUint64(&pool.remain, ^uint64(0))
 				}()
 			}
 		}()
@@ -38,10 +42,11 @@ func New(size uint) *Pool {
 // Put - put the job to workers pool
 func (pool *Pool) Put(job Job) {
 	pool.workers <- job
-	pool.remain++
+	atomic.AddUint64(&pool.remain, 1)
 }
 
 // Idle - check workers pool idle status
 func (pool *Pool) Idle() bool {
-	return pool.remain == 0
+	remain := atomic.LoadUint64(&pool.remain)
+	return remain == 0
 }
