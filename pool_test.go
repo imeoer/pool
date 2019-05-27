@@ -15,15 +15,13 @@ func (job *TestJob) Do() {
 }
 
 func TestRun(t *testing.T) {
-	po := New(3)
-	for i := 1; i <= 10; i++ {
+	var jobs []WorkerPoolJob
+	for i := 1; i <= 100; i++ {
 		job := &TestJob{id: i}
-		go po.Put(job)
+		jobs = append(jobs, job)
 	}
-	for job := range po.Output {
-		if po.Idle() {
-			break
-		}
+	pool := NewWorkerPool(jobs, 20, time.Millisecond*10)
+	for job := range pool.Results {
 		fmt.Printf("Done job %d\n", job.(*TestJob).id)
 	}
 }

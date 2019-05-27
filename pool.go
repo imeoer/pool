@@ -2,51 +2,53 @@ package pool
 
 import (
 	"sync/atomic"
+	"time"
 )
 
-// Pool - pool object
-type Pool struct {
-	size    uint
+// WorkerPool - use Results to get job result
+type WorkerPool struct {
+	worker  uint
 	remain  uint64
-	workers chan Job
-	Output  chan Job
+	queue   chan WorkerPoolJob
+	Results chan WorkerPoolJob
 }
 
-// Job - need to implement the Do() method
-type Job interface {
+// WorkerPoolJob - need to implement the Do() method
+type WorkerPoolJob interface {
 	Do()
 }
 
-// New - create workers pool
-func New(size uint) *Pool {
-	pool := &Pool{
-		size:    size,
-		workers: make(chan Job, size),
-		Output:  make(chan Job),
+// NewWorkerPool - create workers pool and do job
+func NewWorkerPool(jobs []WorkerPoolJob, worker uint, duration time.Duration) *WorkerPool {
+	count := len(jobs)
+	pool := &WorkerPool{
+		worker:  worker,
+		remain:  0,
+		queue:   make(chan WorkerPoolJob, count),
+		Results: make(chan WorkerPoolJob, count),
 	}
-	for count := uint(0); count < pool.size; count++ {
+	for _, job := range jobs {
+		pool.queue <- job
+		atomic.AddUint64(&pool.remain, 1)
+	}
+	for count := uint(0); count < pool.worker; count++ {
 		go func() {
 			for {
-				job := <-pool.workers
+				job, ok := <-pool.queue
+				if !ok {
+					return
+				}
 				job.Do()
-				go func() {
-					pool.Output <- job
-					atomic.AddUint64(&pool.remain, ^uint64(0))
-				}()
+				pool.Results <- job
+				if atomic.AddUint64(&pool.remain, ^uint64(0)) == 0 {
+					close(pool.queue)
+					close(pool.Results)
+				}
+				if duration > 0 {
+					<-time.After(duration)
+				}
 			}
 		}()
 	}
 	return pool
-}
-
-// Put - put the job to workers pool
-func (pool *Pool) Put(job Job) {
-	pool.workers <- job
-	atomic.AddUint64(&pool.remain, 1)
-}
-
-// Idle - check workers pool idle status
-func (pool *Pool) Idle() bool {
-	remain := atomic.LoadUint64(&pool.remain)
-	return remain == 0
 }
