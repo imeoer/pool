@@ -23,13 +23,17 @@ func NewWorkerPool(jobs []WorkerPoolJob, worker uint, duration time.Duration) *W
 	count := len(jobs)
 	pool := &WorkerPool{
 		worker:  worker,
-		remain:  0,
+		remain:  uint64(count),
 		queue:   make(chan WorkerPoolJob, count),
 		Results: make(chan WorkerPoolJob, count),
 	}
+	if count <= 0 {
+		close(pool.queue)
+		close(pool.Results)
+		return pool
+	}
 	for _, job := range jobs {
 		pool.queue <- job
-		atomic.AddUint64(&pool.remain, 1)
 	}
 	for count := uint(0); count < pool.worker; count++ {
 		go func() {
@@ -45,7 +49,7 @@ func NewWorkerPool(jobs []WorkerPoolJob, worker uint, duration time.Duration) *W
 					close(pool.Results)
 				}
 				if duration > 0 {
-					<-time.After(duration)
+					time.Sleep(duration)
 				}
 			}
 		}()
